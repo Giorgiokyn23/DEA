@@ -14,3 +14,7 @@ C.apply(C.RZ(0)) # apply Z rotation gate to qubit 0
 unique, indep_params = DEA.DEA(C)
 if unique:
     print("The list of independent parameters is "+str(indep_params)+".")
+
+unique1, indep_params1 = DEA.DEA_with_T(C)
+if unique1:
+    print("The list of independent parameters is "+str(indep_params1)+".")
