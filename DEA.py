@@ -228,11 +228,45 @@ def compute_T_matrix(S,param_gate_map):
     """
 
     n_params = len(param_gate_map)
-    T = np.asmatrix((np.zeros((n_params,n_params)))
+    T = np.asmatrix(np.zeros((n_params, n_params)))
 
-    # Apply product rule accross gates
+    # Apply product rule across gates
     for j in range(n_params):
-        gates_j = param_gate_map[j] # gates affected by parameter j
+        gates_j = param_gate_map[j]  # gates affected by parameter j
         for k in range(n_params):
-            gates_k= param_gate_map[k] # gates affected by parameter k
+            gates_k = param_gate_map[k]  # gates affected by parameter k
             # Sum the S matrix elements corresponding to gate combinations for j and k
+            for gate_j in gates_j:
+                for gate_k in gates_k:
+                    T[j, k] += S[gate_j, gate_k]
+
+    return T
+
+def DEA_with_T(circuit, tol=10**(-10),n_points=1000,verbose=True):
+    """
+    Run DEA with the new T matrix based on the product and chain rule.
+    """
+
+    n_params = len(circuit._param_to_gate)
+    independent_at_point=[]
+
+    if verbose:
+        print("Running DEA with T matrix")
+
+    # Map parameters to the gates they affect
+    param_gate_map={}
+    for idx, param_idx in enumerate(circuit._param_to_gate):
+        if param_idx not in param_gate_map:
+            param_gate_map[param_idx]=[]
+
+        param_gate_map[param_idx].append(idx)
+
+    for idx in tqdm.tqdm(range(n_points)):
+        # Choose random parameter values
+        theta = 2 * np.pi * np.random.random(n_params)
+
+        # Compute S matrix
+        S = compute_S_matrix(circuit,n_params,theta)
+
+        #Compute T
+
