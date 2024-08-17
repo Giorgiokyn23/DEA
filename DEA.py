@@ -268,5 +268,49 @@ def DEA_with_T(circuit, tol=10**(-10),n_points=1000,verbose=True):
         # Compute S matrix
         S = compute_S_matrix(circuit,n_params,theta)
 
-        #Compute T
+        #Compute T matrix
+
+        T = compute_T_matrix(S, param_gate_map)
+
+        #Find independent parameters at the point using T matrix
+
+        indep_params = []
+
+        for p in range(n_params):
+            current_T = np.asmatrix(np.zeros((p+1,p+1)))
+            current_params= copy.copy(indep_params)
+            current_params.append(p)
+
+            for j in range(len(current_params)):
+                for k in range(len(current_params)):
+                    current_T[j,k]= T[current_params[j], current_params[k]]
+
+
+            if min(np.linalg.eigvals(current_T))> tol:
+                indep_params.append(p)
+
+
+        # Check if this is a known set of independent parameters
+
+        known = False
+        for known_set_idx in range(len(independent_at_point)):
+            known_set = independent_at_point[known_set_idx][0]
+            same = (len(known_set)==len(indep_params))
+            if same:
+                for j in range(len(known_set)):
+                    same= same and (known_set[j]== indep_params[j])
+
+            known= known or same
+            if same:
+                known_idx= known_set_idx
+
+        if known:
+            independent_at_point[known_idx].append(theta)
+
+        else:independent_at_point.append([indep_params,theta])
+    if len(independent_at_point)== 1:
+        return True, independent_at_point[0][0]
+    return False, independent_at_point
+
+
 
