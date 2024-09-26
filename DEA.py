@@ -219,46 +219,90 @@ def compute_S_matrix(circuit, n_params, theta):
         return S
 
 
-def compute_T_matrix(S,param_gate_map):
-    """
-   Compute the T matrix by applying the product and chain rule.
-   param_gate_map: A dictionary mapping each parameter to the gates it affects.
-            For example,{0: [1,5], 1:[2,3,7]} indicates that parameter 0 is in gates 1 and 5 and parameter 1 is in gate 2,3,7
 
+# Attempt 26/09/2024
+def compute_T_matrix(S, phi_dict, phi_values):
+    """
+    Compute the T matrix by following the generalized procedure.
+
+    Parameters:
+    - S: The base matrix representing gate interactions
+    - phi_dict: A dictionary mapping each parameter phi to the list of gates they affect.
+    - phi_values: A list of the phi parameter values (current values of the trainable parameters).
+
+    Returns:
+    - T: The resulting matrix T computed from S and the phi_dict mapping
     """
 
-    n_params = len(param_gate_map)
+    n_params = len(phi_dict)  # Number of parameters in phi_dict
+
+    # Initialize T matrix as an empty matrix using np.asmatrix to represent the matrix structure
     T = np.asmatrix(np.zeros((n_params, n_params)))
 
-    # Apply product rule across gates
-    for j in range(n_params):
-        gates_j = param_gate_map[j]  # gates affected by parameter j
-        for k in range(n_params):
-            gates_k = param_gate_map[k]  # gates affected by parameter k
-            # Sum the S matrix elements corresponding to gate combinations for j and k
-            for gate_j in gates_j:
-                for gate_k in gates_k:
-                    T[j, k] += S[gate_j, gate_k]
+    # Loop over all parameter pairs (i, j) to compute T[i, j]
+    for i in range(n_params):
+        gates_i = phi_dict[i]  # Gates affected by parameter phi_i
+
+        for j in range(n_params):
+            gates_j = phi_dict[j]  # Gates affected by parameter phi_j
+
+            # Initialize first and second terms for the scalar product
+            first_term = []  # List to store terms related to parameter phi_i
+            second_term = []  # List to store terms related to parameter phi_j
+
+            # First term: Iterate over gates in gates_i
+            for n in gates_i:
+                # Check if gate n is shared with other parameters, i.e., apply the product rule
+                factors_i = [phi_values[p] for p in range(n_params) if n in phi_dict[p] and p != i]
+
+                if factors_i:
+                    # If there are multiple parameters in the gate, compute their product
+                    product_term_i = np.prod(factors_i)
+                    first_term.append((product_term_i, n))  # Append (product, gate index n)
+                else:
+                    # If no other parameters, append 1 (since there's no additional multiplication)
+                    first_term.append((1, n))
+
+            # Second term: Iterate over gates in gates_j
+            for k in gates_j:
+                # Check if gate k is shared with other parameters, apply the product rule if needed
+                factors_j = [phi_values[p] for p in range(n_params) if k in phi_dict[p] and p != j]
+
+                if factors_j:
+                    # Compute the product of parameters in the same gate
+                    product_term_j = np.prod(factors_j)
+                    second_term.append((product_term_j, k))  # Append (product, gate index k)
+                else:
+                    # If no other parameters, append 1
+                    second_term.append((1, k))
+
+            # Compute the scalar product between the two terms
+            T_ij = 0
+            for term_i, n in first_term:
+                for term_j, k in second_term:
+                    # Multiply the terms and map them to S[n, k] (interaction between gates n and k)
+                    T_ij += term_i * term_j * S[n, k]  # S[n, k] refers to the base matrix value
+
+            # Store the result in the T matrix
+            T[i, j] = T_ij
 
     return T
 
-def DEA_with_T(circuit, tol=10**(-10),n_points=1000,verbose=True):
+def DEA_with_T(circuit, tol=10 ** (-10), n_points=1000, verbose=True):
     """
     Run DEA with the new T matrix based on the product and chain rule.
     """
-
     n_params = len(circuit._param_to_gate)
-    independent_at_point=[]
+    independent_at_point = []
 
     if verbose:
         print("Running DEA with T matrix")
 
     # Map parameters to the gates they affect
-    param_gate_map={}
+    param_gate_map = {}
     for idx, param_idx in enumerate(circuit._param_to_gate):
         if param_idx not in param_gate_map:
-            param_gate_map[param_idx]=[]
-
+            param_gate_map[param_idx] = []
         param_gate_map[param_idx].append(idx)
 
     for idx in tqdm.tqdm(range(n_points)):
@@ -266,49 +310,41 @@ def DEA_with_T(circuit, tol=10**(-10),n_points=1000,verbose=True):
         theta = 2 * np.pi * np.random.random(n_params)
 
         # Compute S matrix
-        S = compute_S_matrix(circuit,n_params,theta)
+        S = compute_S_matrix(circuit, n_params, theta)
 
-        #Compute T matrix
-
+        # Compute T matrix using product rule and chain rule
         T = compute_T_matrix(S, param_gate_map)
 
-        #Find independent parameters at the point using T matrix
-
+        # Find independent parameters at the point using T matrix
         indep_params = []
-
         for p in range(n_params):
-            current_T = np.asmatrix(np.zeros((p+1,p+1)))
-            current_params= copy.copy(indep_params)
+            current_T = np.asmatrix(np.zeros((p + 1, p + 1)))
+            current_params = copy.copy(indep_params)
             current_params.append(p)
-
             for j in range(len(current_params)):
                 for k in range(len(current_params)):
-                    current_T[j,k]= T[current_params[j], current_params[k]]
+                    current_T[j, k] = T[current_params[j], current_params[k]]
 
-
-            if min(np.linalg.eigvals(current_T))> tol:
+            if min(np.linalg.eigvals(current_T)) > tol:
                 indep_params.append(p)
 
-
         # Check if this is a known set of independent parameters
-
         known = False
         for known_set_idx in range(len(independent_at_point)):
             known_set = independent_at_point[known_set_idx][0]
-            same = (len(known_set)==len(indep_params))
+            same = (len(known_set) == len(indep_params))
             if same:
                 for j in range(len(known_set)):
-                    same= same and (known_set[j]== indep_params[j])
-
-            known= known or same
+                    same = same and (known_set[j] == indep_params[j])
+            known = known or same
             if same:
-                known_idx= known_set_idx
-
+                known_idx = known_set_idx
         if known:
             independent_at_point[known_idx].append(theta)
+        else:
+            independent_at_point.append([indep_params, theta])
 
-        else:independent_at_point.append([indep_params,theta])
-    if len(independent_at_point)== 1:
+    if len(independent_at_point) == 1:
         return True, independent_at_point[0][0]
     return False, independent_at_point
 
