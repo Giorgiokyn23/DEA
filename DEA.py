@@ -219,6 +219,34 @@ def compute_S_matrix(circuit, n_params, theta):
         return S
 
 
+def compute_phi_dict(circuit):
+    """
+    Compute the phi_dict and phi_values for a given circuit object.
+
+    Parameters:
+    - circuit: The Circuit object that contains gates and parameter information.
+
+    Returns:
+    - phi_dict: A dictionary mapping each parameter index to the list of gate indices it affects.
+    - phi_values: A list of the current phi parameter values (trainable parameters).
+    """
+    phi_dict = {}
+    phi_values = []
+
+    param_idx = 0  # Index for phi parameters
+    for idx, gate in enumerate(circuit._gates):
+        # Check if the gate is parametric by checking if it's a tuple (parameterized gate)
+        if isinstance(gate, tuple):
+            if param_idx not in phi_dict:
+                phi_dict[param_idx] = []
+            # Append the current gate index to the list of gates associated with the parameter
+            phi_dict[param_idx].append(idx)
+            # Store the parameter value for this gate (assuming each gate has its angle as a parameter)
+            phi_values.append(None)  # Placeholder for now, as no specific values provided
+            param_idx += 1
+
+    return phi_dict, phi_values
+
 
 # Attempt 26/09/2024
 def compute_T_matrix(S, phi_dict, phi_values):
@@ -288,62 +316,98 @@ def compute_T_matrix(S, phi_dict, phi_values):
 
     return T
 
-def DEA_with_T(circuit, tol=10 ** (-10), n_points=1000, verbose=True):
+
+def find_independent_parameters(T, n_params, tol, independent_at_point, theta):
     """
-    Run DEA with the new T matrix based on the product and chain rule.
+    Find the independent parameters at a given point using the T matrix.
+
+    Parameters:
+    - T: The matrix representing parameter interactions.
+    - n_params: Number of parameters in the circuit.
+    - tol: Tolerance for considering eigenvalues as zero.
+    - independent_at_point: List of independent parameters found so far.
+    - theta: The current parameter values.
+
+    Returns:
+    - independent_at_point: Updated list of independent parameters.
     """
-    n_params = len(circuit._param_to_gate)
+    indep_params = []
+
+    # Find independent parameters
+    for p in range(n_params):
+        current_T = np.asmatrix(np.zeros((p + 1, p + 1)))
+        current_params = copy.copy(indep_params)
+        current_params.append(p)
+
+        for j in range(len(current_params)):
+            for k in range(len(current_params)):
+                current_T[j, k] = T[current_params[j], current_params[k]]
+
+        # Check if the minimum eigenvalue is greater than the tolerance (indicating independence)
+        if min(np.linalg.eigvals(current_T)) > tol:
+            indep_params.append(p)
+
+    # Check if this is a known set of independent parameters
+    known = False
+    for known_set_idx in range(len(independent_at_point)):
+        known_set = independent_at_point[known_set_idx][0]
+        same = (len(known_set) == len(indep_params))
+        if same:
+            for j in range(len(known_set)):
+                same = same and (known_set[j] == indep_params[j])
+        known = known or same
+        if same:
+            known_idx = known_set_idx
+
+    # Update the list of independent parameters
+    if known:
+        independent_at_point[known_idx].append(theta)
+    else:
+        independent_at_point.append([indep_params, theta])
+
+    return independent_at_point
+
+
+
+def IDEA(circuit, tol=10 ** (-10), n_points=1000, verbose=True):
+    """
+    Perform Integrated Dimensional Expressivity Analysis (DEA) using the computed T matrix.
+
+    Parameters:
+    - circuit: The quantum circuit being analyzed.
+    - tol: Tolerance for considering eigenvalues.
+    - n_points: Number of random points to sample.
+    - verbose: If True, print progress information.
+
+    Returns:
+    - A tuple with:
+        - A boolean indicating if the parameters are independent.
+        - The set of independent parameters if they exist.
+    """
+    # Calculate the phi_dict and the phi_values associated to the circuit
+    phi_dict, phi_values = compute_phi_dict(circuit)
+
+    # Number of parameters (phi) in the circuit
+    n_params = len(phi_dict)
     independent_at_point = []
 
     if verbose:
         print("Running DEA with T matrix")
 
-    # Map parameters to the gates they affect
-    param_gate_map = {}
-    for idx, param_idx in enumerate(circuit._param_to_gate):
-        if param_idx not in param_gate_map:
-            param_gate_map[param_idx] = []
-        param_gate_map[param_idx].append(idx)
-
     for idx in tqdm.tqdm(range(n_points)):
-        # Choose random parameter values
+        # Choose random parameter values for theta (could be phi_values passed)
         theta = 2 * np.pi * np.random.random(n_params)
 
-        # Compute S matrix
-        S = compute_S_matrix(circuit, n_params, theta)
+        # Compute the S matrix for the given circuit and theta values
+        S_matrix = compute_S_matrix(circuit, n_params, theta)
 
-        # Compute T matrix using product rule and chain rule
-        T = compute_T_matrix(S, param_gate_map)
+        # Compute the T matrix using the computed S matrix, phi_dict, and phi_values
+        T = compute_T_matrix(S_matrix, phi_dict, phi_values)
 
-        # Find independent parameters at the point using T matrix
-        indep_params = []
-        for p in range(n_params):
-            current_T = np.asmatrix(np.zeros((p + 1, p + 1)))
-            current_params = copy.copy(indep_params)
-            current_params.append(p)
-            for j in range(len(current_params)):
-                for k in range(len(current_params)):
-                    current_T[j, k] = T[current_params[j], current_params[k]]
+        # Call the modularized function to find independent parameters
+        independent_at_point = find_independent_parameters(T, n_params, tol, independent_at_point, theta)
 
-            if min(np.linalg.eigvals(current_T)) > tol:
-                indep_params.append(p)
-
-        # Check if this is a known set of independent parameters
-        known = False
-        for known_set_idx in range(len(independent_at_point)):
-            known_set = independent_at_point[known_set_idx][0]
-            same = (len(known_set) == len(indep_params))
-            if same:
-                for j in range(len(known_set)):
-                    same = same and (known_set[j] == indep_params[j])
-            known = known or same
-            if same:
-                known_idx = known_set_idx
-        if known:
-            independent_at_point[known_idx].append(theta)
-        else:
-            independent_at_point.append([indep_params, theta])
-
+    # Return the result: if only one set of independent parameters was found, return it
     if len(independent_at_point) == 1:
         return True, independent_at_point[0][0]
     return False, independent_at_point
