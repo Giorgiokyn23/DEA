@@ -221,97 +221,105 @@ def compute_S_matrix(circuit, n_params, theta):
 
 def compute_phi_dict(circuit):
     """
-    Compute the phi_dict and phi_values for a given circuit object.
+    Computes the phi_dict and phi_values from the given circuit, adjusting indices to ignore non-parametric gates.
 
     Parameters:
-    - circuit: The Circuit object that contains gates and parameter information.
+    - circuit: The quantum circuit object.
 
     Returns:
-    - phi_dict: A dictionary mapping each parameter index to the list of gate indices it affects.
-    - phi_values: A list of the current phi parameter values (trainable parameters).
+    - phi_dict: A dictionary mapping each parameter to the gates it affects.
+    - phi_values: A list of parameter values.
     """
-    phi_dict = {}
-    phi_values = []
+    phi_dict = {}  # Dictionary for mapping parameters to gates
+    phi_values = []  # List for storing parameter values
 
-    param_idx = 0  # Index for phi parameters
-    for idx, gate in enumerate(circuit._gates):
-        # Check if the gate is parametric by checking if it's a tuple (parameterized gate)
-        if isinstance(gate, tuple):
-            if param_idx not in phi_dict:
-                phi_dict[param_idx] = []
-            # Append the current gate index to the list of gates associated with the parameter
-            phi_dict[param_idx].append(idx)
-            # Store the parameter value for this gate (assuming each gate has its angle as a parameter)
-            phi_values.append(None)  # Placeholder for now, as no specific values provided
-            param_idx += 1
+    param_index = 0  # Index for the parameters
+    gate_counter = 0  # Tracks the adjusted gate index (ignoring non-parametric gates)
+
+    for gate_idx, gate in enumerate(circuit._gates):
+        if isinstance(gate, tuple):  # Only consider parametric gates
+            phi_dict[param_index] = [gate_counter]  # Map parameter to the adjusted gate index
+            phi_values.append(None)  # Placeholder for the parameter value
+            param_index += 1
+            gate_counter += 1  # Increment only for parametric gates
+        else:
+            print(f"Skipping non-parametric gate at index {gate_idx}: {gate}")
 
     return phi_dict, phi_values
 
 
 # Attempt 26/09/2024
+import numpy as np
+
+import numpy as np
+
+
 def compute_T_matrix(S, phi_dict, phi_values):
     """
     Compute the T matrix by following the generalized procedure.
 
     Parameters:
-    - S: The base matrix representing gate interactions
+    - S: The base matrix representing gate interactions (numeric matrix).
     - phi_dict: A dictionary mapping each parameter phi to the list of gates they affect.
     - phi_values: A list of the phi parameter values (current values of the trainable parameters).
 
     Returns:
-    - T: The resulting matrix T computed from S and the phi_dict mapping
+    - T: The resulting matrix T computed from S and the phi_dict mapping.
     """
 
     n_params = len(phi_dict)  # Number of parameters in phi_dict
+    T = np.asmatrix(np.zeros((n_params, n_params)))  # Initialize T matrix with numerical entries
 
-    # Initialize T matrix as an empty matrix using np.asmatrix to represent the matrix structure
-    T = np.asmatrix(np.zeros((n_params, n_params)))
+    print(f"phi_dict: {phi_dict}")  # Debug: Print the phi_dict
 
     # Loop over all parameter pairs (i, j) to compute T[i, j]
     for i in range(n_params):
         gates_i = phi_dict[i]  # Gates affected by parameter phi_i
+        print(f"gates_i for parameter {i}: {gates_i}")  # Debug: Print gates affected by parameter i
 
         for j in range(n_params):
             gates_j = phi_dict[j]  # Gates affected by parameter phi_j
+            print(f"gates_j for parameter {j}: {gates_j}")  # Debug: Print gates affected by parameter j
 
             # Initialize first and second terms for the scalar product
-            first_term = []  # List to store terms related to parameter phi_i
-            second_term = []  # List to store terms related to parameter phi_j
+            first_term = []
+            second_term = []
 
             # First term: Iterate over gates in gates_i
             for n in gates_i:
-                # Check if gate n is shared with other parameters, i.e., apply the product rule
-                factors_i = [phi_values[p] for p in range(n_params) if n in phi_dict[p] and p != i]
+                if n >= S.shape[0]:
+                    raise IndexError(f"Index {n} is out of bounds for S with size {S.shape[0]}")
+                print(f"n in gates_i: {n}")  # Debug: Print n
 
+                # If gate n has more parameters, construct the product term
+                factors_i = [phi_values[p] for p in range(n_params) if n in phi_dict[p] and p != i]
                 if factors_i:
-                    # If there are multiple parameters in the gate, compute their product
                     product_term_i = np.prod(factors_i)
-                    first_term.append((product_term_i, n))  # Append (product, gate index n)
+                    first_term.append((product_term_i, n))  # Append the product and the gate index
                 else:
-                    # If no other parameters, append 1 (since there's no additional multiplication)
-                    first_term.append((1, n))
+                    first_term.append((1, n))  # Append 1 if no other parameters are present
 
             # Second term: Iterate over gates in gates_j
             for k in gates_j:
-                # Check if gate k is shared with other parameters, apply the product rule if needed
+                if k >= S.shape[1]:
+                    raise IndexError(f"Index {k} is out of bounds for S with size {S.shape[1]}")
+                print(f"k in gates_j: {k}")  # Debug: Print k
+
                 factors_j = [phi_values[p] for p in range(n_params) if k in phi_dict[p] and p != j]
-
                 if factors_j:
-                    # Compute the product of parameters in the same gate
                     product_term_j = np.prod(factors_j)
-                    second_term.append((product_term_j, k))  # Append (product, gate index k)
+                    second_term.append((product_term_j, k))  # Append the product and the gate index
                 else:
-                    # If no other parameters, append 1
-                    second_term.append((1, k))
+                    second_term.append((1, k))  # Append 1 if no other parameters are present
 
-            # Compute the scalar product between the two terms
+            # Now, compute the scalar product between the two terms
             T_ij = 0
             for term_i, n in first_term:
                 for term_j, k in second_term:
-                    # Multiply the terms and map them to S[n, k] (interaction between gates n and k)
-                    T_ij += term_i * term_j * S[n, k]  # S[n, k] refers to the base matrix value
+                    print(f"Calculating T_ij for gates {n}, {k}")  # Debug: Print n, k before calculation
+                    T_ij += term_i * term_j * S[n, k]
 
-            # Store the result in the T matrix
+            # Store the result in T[i, j]
             T[i, j] = T_ij
 
     return T
