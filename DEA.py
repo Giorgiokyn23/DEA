@@ -249,9 +249,6 @@ def compute_phi_dict(circuit):
 
 
 # Attempt 26/09/2024
-import numpy as np
-
-import numpy as np
 
 
 def compute_T_matrix(S, phi_dict, phi_values):
@@ -407,7 +404,11 @@ def IDEA(circuit, tol=10 ** (-10), n_points=1000, verbose=True):
         theta = 2 * np.pi * np.random.random(n_params)
 
         # Compute the S matrix for the given circuit and theta values
-        S_matrix = compute_S_matrix(circuit, n_params, theta)
+        #S_matrix = compute_S_matrix(circuit, n_params, theta)
+        S_matrix= np.asmatrix(np.zeros((n_params,n_params)))
+        for j in range(n_params):
+            for k in range(n_params):
+                S_matrix[j, k] = (circuit.DiffCircuitFn(j, theta).H * circuit.DiffCircuitFn(k, theta)).real
 
         # Compute the T matrix using the computed S matrix, phi_dict, and phi_values
         T = compute_T_matrix(S_matrix, phi_dict, phi_values)
