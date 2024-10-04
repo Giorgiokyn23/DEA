@@ -21,10 +21,15 @@ C.apply(C.RZ(1))         # apply Z rotation gate to qubit 1
 
 phi_dict,phi_values=DEA.compute_phi_dict(C)
 print(phi_dict, phi_values)
+A = DEA.IDEA(C,n_points=100)
 
+print(A)
+
+B= DEA.DEA(C,n_points=100)
+print(B)
 #S= DEA.compute_S_matrix(C,8,1.234)
 #print(S)
-
+"""
 S = np.array([
     [0.9, 0.1, 0.2, 0.0, 0.3, 0.0, 0.4, 0.0],
     [0.1, 0.8, 0.3, 0.1, 0.0, 0.2, 0.0, 0.4],
@@ -51,6 +56,7 @@ if unique:
     print("The list of independent parameters with S is "+str(indep_params)+".")
 else:
     print(indep_params)
+"""
 """
 C above is a base circuit >> S matrix in DEA
 base parameters >> theta

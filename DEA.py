@@ -163,7 +163,7 @@ class Circuit:
         
 def DEA(circuit, tol = 10**(-10), n_points = 1000,verbose=True):
     n_params = len(circuit._param_to_gate)
-
+    np.random.seed(42)
     independent_at_point = []
 
     if verbose:
@@ -249,7 +249,6 @@ def compute_phi_dict(circuit):
 
 
 # Attempt 26/09/2024
-
 
 def compute_T_matrix(S, phi_dict, phi_values):
     """
@@ -389,6 +388,8 @@ def IDEA(circuit, tol=10 ** (-10), n_points=1000, verbose=True):
         - A boolean indicating if the parameters are independent.
         - The set of independent parameters if they exist.
     """
+    # Set a fixed seed for reproducibility
+    np.random.seed(42)
     # Calculate the phi_dict and the phi_values associated to the circuit
     phi_dict, phi_values = compute_phi_dict(circuit)
 
@@ -405,7 +406,7 @@ def IDEA(circuit, tol=10 ** (-10), n_points=1000, verbose=True):
 
         # Compute the S matrix for the given circuit and theta values
         #S_matrix = compute_S_matrix(circuit, n_params, theta)
-        S_matrix= np.asmatrix(np.zeros((n_params,n_params)))
+        S_matrix = np.asmatrix(np.zeros((n_params, n_params)))
         for j in range(n_params):
             for k in range(n_params):
                 S_matrix[j, k] = (circuit.DiffCircuitFn(j, theta).H * circuit.DiffCircuitFn(k, theta)).real
