@@ -10,7 +10,7 @@ class Circuit:
 
         self._gates = []
         self._param_to_gate = []
-        
+
         set_default_init = True
         if init != None:
             set_default_init = False
@@ -29,11 +29,11 @@ class Circuit:
                 set_default_init = True
             else:
                 self._wavefunction = self._wavefunction/np.sqrt(norm)
-        
+
         if set_default_init:
             self._wavefunction = np.asmatrix(np.zeros((self._dim,1),dtype=np.complex128))
             self._wavefunction[0,0] = 1.
-        
+
         self.__id = np.identity(2,dtype=np.complex128)
         self.__sx = np.matrix([[0,1],[1,0]])
         self.__sy = np.matrix([[0,-1j],[1j,0]])
@@ -61,7 +61,7 @@ class Circuit:
                 ka = int((k-kb)/b2)
                 C[j,k] = A[ja,ka] * B[jb,kb]
         return C
-    
+
     def _ID(self,k=0):
         return np.identity(self._dim,dtype=np.complex128)
     
@@ -79,7 +79,7 @@ class Circuit:
             else:
                 sx = self._tensor(self.__id,sx)
         return sx
-    
+
     def _sY(self,k):
         if k == 0:
             sy = self.__sy
@@ -91,7 +91,7 @@ class Circuit:
             else:
                 sy = self._tensor(self.__id,sy)
         return sy
-    
+
     def _sZ(self,k):
         if k == 0:
             sz = self.__sz
@@ -129,7 +129,7 @@ class Circuit:
 
     def CG(self,gate,c,*t):
         return (self._ID()+self._sZ(c))/2 + (self._ID()-self._sZ(c))/2 * gate(t)
-    
+
     def apply(self,*gate):
         self._gates.append(gate[0])
         if isinstance(gate[0],tuple):
@@ -146,12 +146,49 @@ class Circuit:
                 s = g*s
         return s
 
-    def DiffCircuitFn(self,j,args):
+    '''
+    def DiffCircuitFn(self, j, args):
+        # Inizializza la wavefunction
+        s = self._wavefunction
+        print(f"Initial wavefunction: {s}")
+        print(f"Args: {args}")
+        print(f"Param to gate map: {self._param_to_gate}")
+
+        for idx in range(len(self._gates)):
+            g = self._gates[idx]
+            print(f"\nProcessing gate at index {idx}: {g}")
+
+            if isinstance(g, tuple):
+                try:
+                    arg_idx = self._param_to_gate.index(idx)
+                    print(f"arg_idx for gate {idx}: {arg_idx}")
+
+                    if arg_idx == j:
+                        # Se arg_idx è uguale a j, applica il gate derivato
+                        print(f"Applying derivative gate for param {arg_idx} on gate {idx}")
+                        s = g[1](args[arg_idx]) * s
+                    else:
+                        # Altrimenti applica il gate normale
+                        print(f"Applying gate for param {arg_idx} on gate {idx}")
+                        s = g[0](args[arg_idx]) * s
+                except IndexError as e:
+                    print(f"Warning: param index {arg_idx} out of bounds. Skipping. Error: {e}")
+                    continue
+            else:
+                print(f"Applying non-parametric gate at index {idx}")
+                s = g * s
+
+        print(f"Final wavefunction: {s}")
+        return s
+
+    '''
+    def DiffCircuitFn(self, j ,args):
         s = self._wavefunction
         for idx in range(len(self._gates)):
             g = self._gates[idx]
             if isinstance(g,tuple):
                 arg_idx = self._param_to_gate.index(idx)
+                print(arg_idx)
                 if arg_idx == j:
                     s = g[1](args[arg_idx]) * s
                 else:
@@ -159,8 +196,40 @@ class Circuit:
             else:
                 s = g*s
         return s
-        
-        
+
+    def DiffCircuitFn(self, j, args, phi_dict):
+        """
+        Computes the derivative of the circuit with respect to parameter j.
+
+        - j: index of the parameter for which we want the derivative
+        - args: list of parameter values
+        - phi_dict: dictionary mapping parameters to their corresponding gates
+        """
+        s = self._wavefunction  # Initialize the circuit's wavefunction (state)
+
+        # Iterate over all gates in the circuit
+        for idx in range(len(self._gates)):
+            g = self._gates[idx]  # Retrieve the current gate
+
+            if isinstance(g, tuple):  # Only handle parametric gates (tuples)
+                # Find which parameter in phi_dict corresponds to this gate
+                arg_idx = None
+                for param_idx, gate_indices in phi_dict.items():
+                    if idx in gate_indices:  # If the current gate is associated with this parameter
+                        arg_idx = param_idx  # Set arg_idx to the correct parameter index
+                        break
+
+                if arg_idx is not None:  # If we found a matching parameter for this gate
+                    if arg_idx == j:  # If this is the parameter we're differentiating by
+                        s = g[1](args[arg_idx]) * s  # Apply the derivative of the gate w.r.t. the parameter
+                    else:
+                        s = g[0](args[arg_idx]) * s  # Apply the gate normally
+            else:
+                s = g * s  # Apply non-parametric gates normally
+
+        return s  # Return the modified wavefunction
+
+
 def DEA(circuit, tol = 10**(-10), n_points = 1000,verbose=True):
     n_params = len(circuit._param_to_gate)
     np.random.seed(42)
@@ -171,6 +240,8 @@ def DEA(circuit, tol = 10**(-10), n_points = 1000,verbose=True):
     for idx in tqdm.tqdm(range(n_points)):
         # choose random point
         theta = 2*np.pi*np.random.random(n_params)
+        print("parameter")
+        print(theta)
         # compute S_N matrix
         S = np.asmatrix(np.zeros((n_params,n_params)))
         for j in range(n_params):
@@ -221,31 +292,41 @@ def compute_S_matrix(circuit, n_params, theta):
 
 def compute_phi_dict(circuit):
     """
-    Computes the phi_dict and phi_values from the given circuit, adjusting indices to ignore non-parametric gates.
+    Computes the phi_dict and phi_values from the given circuit, correctly handling parameters
+    that are reused across multiple gates.
 
     Parameters:
     - circuit: The quantum circuit object.
 
     Returns:
-    - phi_dict: A dictionary mapping each parameter to the gates it affects.
-    - phi_values: A list of parameter values.
+    - phi_dict: A dictionary mapping each parameter to the gates it affects (can map to multiple gates).
+    - phi_values: A list of parameter values (initialized to None).
     """
     phi_dict = {}  # Dictionary for mapping parameters to gates
     phi_values = []  # List for storing parameter values
 
-    param_index = 0  # Index for the parameters
-    gate_counter = 0  # Tracks the adjusted gate index (ignoring non-parametric gates)
+    param_to_gate_map = {}  # Temporary map from parameters to gate indices
+    gate_counter = 0  # Keeps track of the gate index (ignores non-parametric gates)
 
     for gate_idx, gate in enumerate(circuit._gates):
         if isinstance(gate, tuple):  # Only consider parametric gates
-            phi_dict[param_index] = [gate_counter]  # Map parameter to the adjusted gate index
-            phi_values.append(None)  # Placeholder for the parameter value
-            param_index += 1
-            gate_counter += 1  # Increment only for parametric gates
+            param_idx = circuit._param_to_gate.index(gate_idx)  # Get the parameter index
+            print(circuit._gates)
+            if param_idx not in param_to_gate_map:
+                param_to_gate_map[param_idx] = []  # Initialize a list if it's not present
+
+            param_to_gate_map[param_idx].append(gate_counter)  # Add this gate index to the parameter
+            phi_values.append(None)  # Placeholder for the parameter value (could store actual values later)
+
+            gate_counter += 1  # Only increment for parametric gates
         else:
             print(f"Skipping non-parametric gate at index {gate_idx}: {gate}")
 
+    # Convert param_to_gate_map into phi_dict
+    phi_dict = {k: v for k, v in param_to_gate_map.items()}
+
     return phi_dict, phi_values
+
 
 
 # Attempt 26/09/2024
@@ -267,7 +348,7 @@ def compute_T_matrix(S, phi_dict, phi_values):
     T = np.asmatrix(np.zeros((n_params, n_params)))  # Initialize T matrix with numerical entries
 
     print(f"phi_dict: {phi_dict}")  # Debug: Print the phi_dict
-
+    print(f"phi_values:{phi_values}")
     # Loop over all parameter pairs (i, j) to compute T[i, j]
     for i in range(n_params):
         gates_i = phi_dict[i]  # Gates affected by parameter phi_i
@@ -372,13 +453,15 @@ def find_independent_parameters(T, n_params, tol, independent_at_point, theta):
     return independent_at_point
 
 
-
-def IDEA(circuit, tol=10 ** (-10), n_points=1000, verbose=True):
+#é tutto sbagliato. Devo mandare in input il numero di parametri e far calcolare la phi_dict e la phi_values
+def IDEA(circuit, phi_dict, tol=10 ** (-10), n_points=1000, verbose=True):
     """
     Perform Integrated Dimensional Expressivity Analysis (DEA) using the computed T matrix.
 
     Parameters:
     - circuit: The quantum circuit being analyzed.
+    - phi_dict: The dictionary mapping each parameter to the gates it affects.
+    - n_params: Number of parameters in the circuit.
     - tol: Tolerance for considering eigenvalues.
     - n_points: Number of random points to sample.
     - verbose: If True, print progress information.
@@ -390,10 +473,6 @@ def IDEA(circuit, tol=10 ** (-10), n_points=1000, verbose=True):
     """
     # Set a fixed seed for reproducibility
     np.random.seed(42)
-    # Calculate the phi_dict and the phi_values associated to the circuit
-    phi_dict, phi_values = compute_phi_dict(circuit)
-
-    # Number of parameters (phi) in the circuit
     n_params = len(phi_dict)
     independent_at_point = []
 
@@ -401,26 +480,31 @@ def IDEA(circuit, tol=10 ** (-10), n_points=1000, verbose=True):
         print("Running DEA with T matrix")
 
     for idx in tqdm.tqdm(range(n_points)):
-        # Choose random parameter values for theta (could be phi_values passed)
-        theta = 2 * np.pi * np.random.random(n_params)
+        # Choose random parameter values for phi_values
+        print(n_params)
+        phi_values = 2 * np.pi * np.random.random(n_params)
+        print(f"Iteration {idx}, Random phi_values: {phi_values}")
 
-        # Compute the S matrix for the given circuit and theta values
-        #S_matrix = compute_S_matrix(circuit, n_params, theta)
+        # Compute the S matrix for the given circuit and phi_values
         S_matrix = np.asmatrix(np.zeros((n_params, n_params)))
         for j in range(n_params):
             for k in range(n_params):
-                S_matrix[j, k] = (circuit.DiffCircuitFn(j, theta).H * circuit.DiffCircuitFn(k, theta)).real
+                S_matrix[j, k] = (circuit.DiffCircuitFn(j, phi_values,phi_dict).H * circuit.DiffCircuitFn(k, phi_values,phi_dict)).real
+
+        # Print the computed S_matrix for debugging purposes
+        print(f"S_matrix at iteration {idx}: \n{S_matrix}")
 
         # Compute the T matrix using the computed S matrix, phi_dict, and phi_values
         T = compute_T_matrix(S_matrix, phi_dict, phi_values)
 
         # Call the modularized function to find independent parameters
-        independent_at_point = find_independent_parameters(T, n_params, tol, independent_at_point, theta)
+        independent_at_point = find_independent_parameters(T, n_params, tol, independent_at_point, phi_values)
 
     # Return the result: if only one set of independent parameters was found, return it
     if len(independent_at_point) == 1:
         return True, independent_at_point[0][0]
     return False, independent_at_point
+
 
 
 
