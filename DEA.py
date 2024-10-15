@@ -188,7 +188,6 @@ class Circuit:
             g = self._gates[idx]
             if isinstance(g,tuple):
                 arg_idx = self._param_to_gate.index(idx)
-                print(arg_idx)
                 if arg_idx == j:
                     s = g[1](args[arg_idx]) * s
                 else:
@@ -197,37 +196,7 @@ class Circuit:
                 s = g*s
         return s
 
-    def DiffCircuitFn(self, j, args, phi_dict):
-        """
-        Computes the derivative of the circuit with respect to parameter j.
 
-        - j: index of the parameter for which we want the derivative
-        - args: list of parameter values
-        - phi_dict: dictionary mapping parameters to their corresponding gates
-        """
-        s = self._wavefunction  # Initialize the circuit's wavefunction (state)
-
-        # Iterate over all gates in the circuit
-        for idx in range(len(self._gates)):
-            g = self._gates[idx]  # Retrieve the current gate
-
-            if isinstance(g, tuple):  # Only handle parametric gates (tuples)
-                # Find which parameter in phi_dict corresponds to this gate
-                arg_idx = None
-                for param_idx, gate_indices in phi_dict.items():
-                    if idx in gate_indices:  # If the current gate is associated with this parameter
-                        arg_idx = param_idx  # Set arg_idx to the correct parameter index
-                        break
-
-                if arg_idx is not None:  # If we found a matching parameter for this gate
-                    if arg_idx == j:  # If this is the parameter we're differentiating by
-                        s = g[1](args[arg_idx]) * s  # Apply the derivative of the gate w.r.t. the parameter
-                    else:
-                        s = g[0](args[arg_idx]) * s  # Apply the gate normally
-            else:
-                s = g * s  # Apply non-parametric gates normally
-
-        return s  # Return the modified wavefunction
 
 
 def DEA(circuit, tol = 10**(-10), n_points = 1000,verbose=True):
@@ -240,8 +209,6 @@ def DEA(circuit, tol = 10**(-10), n_points = 1000,verbose=True):
     for idx in tqdm.tqdm(range(n_points)):
         # choose random point
         theta = 2*np.pi*np.random.random(n_params)
-        print("parameter")
-        print(theta)
         # compute S_N matrix
         S = np.asmatrix(np.zeros((n_params,n_params)))
         for j in range(n_params):
@@ -453,7 +420,7 @@ def find_independent_parameters(T, n_params, tol, independent_at_point, theta):
     return independent_at_point
 
 
-#é tutto sbagliato. Devo mandare in input il numero di parametri e far calcolare la phi_dict e la phi_values
+#Fixed the dimension bug
 def IDEA(circuit, phi_dict, tol=10 ** (-10), n_points=1000, verbose=True):
     """
     Perform Integrated Dimensional Expressivity Analysis (DEA) using the computed T matrix.
@@ -473,7 +440,7 @@ def IDEA(circuit, phi_dict, tol=10 ** (-10), n_points=1000, verbose=True):
     """
     # Set a fixed seed for reproducibility
     np.random.seed(42)
-    n_params = len(phi_dict)
+    n_params = len(circuit._param_to_gate)
     independent_at_point = []
 
     if verbose:
@@ -482,23 +449,24 @@ def IDEA(circuit, phi_dict, tol=10 ** (-10), n_points=1000, verbose=True):
     for idx in tqdm.tqdm(range(n_points)):
         # Choose random parameter values for phi_values
         print(n_params)
-        phi_values = 2 * np.pi * np.random.random(n_params)
-        print(f"Iteration {idx}, Random phi_values: {phi_values}")
+        theta = 2 * np.pi * np.random.random(n_params)
+        print(f"Iteration {idx}, Random theta: {theta}")
 
         # Compute the S matrix for the given circuit and phi_values
         S_matrix = np.asmatrix(np.zeros((n_params, n_params)))
         for j in range(n_params):
             for k in range(n_params):
-                S_matrix[j, k] = (circuit.DiffCircuitFn(j, phi_values,phi_dict).H * circuit.DiffCircuitFn(k, phi_values,phi_dict)).real
+                S_matrix[j, k] = (circuit.DiffCircuitFn(j, theta).H * circuit.DiffCircuitFn(k, theta)).real
 
         # Print the computed S_matrix for debugging purposes
         print(f"S_matrix at iteration {idx}: \n{S_matrix}")
 
         # Compute the T matrix using the computed S matrix, phi_dict, and phi_values
-        T = compute_T_matrix(S_matrix, phi_dict, phi_values)
 
+        T = compute_T_matrix(S_matrix, phi_dict, theta)
+        dimT= len(phi_dict)
         # Call the modularized function to find independent parameters
-        independent_at_point = find_independent_parameters(T, n_params, tol, independent_at_point, phi_values)
+        independent_at_point = find_independent_parameters(T, dimT, tol, independent_at_point, theta)
 
     # Return the result: if only one set of independent parameters was found, return it
     if len(independent_at_point) == 1:
