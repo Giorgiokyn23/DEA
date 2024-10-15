@@ -132,9 +132,13 @@ phi_dict = {
     46: [85],
     47: [86],
 }
-print(len(C._param_to_gate))
-print(C._param_to_gate)
-#print(C._gates)
-unique1, indep_params1 = DEA.IDEA(C,phi_dict, n_points=1000)
+
+
+A = DEA.IDEA(C,phi_dict, n_points=100)
+print(A)
+'''
 if unique1:
     print("The list of independent parameters is:", indep_params1)
+else:
+    print("False:", indep_params1)
+'''
