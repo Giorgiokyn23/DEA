@@ -38,6 +38,7 @@ class Circuit:
         self.__sx = np.matrix([[0,1],[1,0]])
         self.__sy = np.matrix([[0,-1j],[1j,0]])
         self.__sz = np.matrix([[1,0],[0,-1]])
+        self.__h = np.matrix([[1/np.sqrt(2),1/np.sqrt(2)],[1/np.sqrt(2),-1/np.sqrt(2)]])
         return
 
     def reset(self):
@@ -104,6 +105,18 @@ class Circuit:
                 sz = self._tensor(self.__id,sz)
         return sz
 
+    def _h(self,k):
+        if k == 0:
+            h = self.__h
+        else:
+            h = self.__id
+        for j in range(1,self.n_qubits):
+            if j == k:
+                h = self._tensor(self.__h,h)
+            else:
+                h = self._tensor(self.__id,h)
+        return h
+
     def RX(self,k):
         r = lambda angle: np.cos(angle/2)*self._ID()-1j*np.sin(angle/2)*self._sX(k)
         dr = lambda angle: np.cos(angle/2)*self._sX(k)-1j*np.sin(angle/2)*self._ID()
@@ -123,6 +136,9 @@ class Circuit:
         r = lambda angle: scipy.linalg.expm(-1j*angle/2 * gate)
         dr = lambda angle: gate * scipy.linalg.expm(-1j*angle/2 * gate)
         return (r,dr)
+
+    def H(self,k):
+        return self._h(k)
 
     def CNOT(self,c,t):
         return (self._ID()+self._sZ(c))/2 + (self._ID()-self._sZ(c))/2 * self._sX(t)
@@ -314,16 +330,16 @@ def compute_T_matrix(S, phi_dict, phi_values):
     n_params = len(phi_dict)  # Number of parameters in phi_dict
     T = np.asmatrix(np.zeros((n_params, n_params)))  # Initialize T matrix with numerical entries
 
-    print(f"phi_dict: {phi_dict}")  # Debug: Print the phi_dict
-    print(f"phi_values:{phi_values}")
+    #print(f"phi_dict: {phi_dict}")  # Debug: Print the phi_dict
+    #print(f"phi_values:{phi_values}")
     # Loop over all parameter pairs (i, j) to compute T[i, j]
     for i in range(n_params):
         gates_i = phi_dict[i]  # Gates affected by parameter phi_i
-        print(f"gates_i for parameter {i}: {gates_i}")  # Debug: Print gates affected by parameter i
+        #print(f"gates_i for parameter {i}: {gates_i}")  # Debug: Print gates affected by parameter i
 
         for j in range(n_params):
             gates_j = phi_dict[j]  # Gates affected by parameter phi_j
-            print(f"gates_j for parameter {j}: {gates_j}")  # Debug: Print gates affected by parameter j
+            #print(f"gates_j for parameter {j}: {gates_j}")  # Debug: Print gates affected by parameter j
 
             # Initialize first and second terms for the scalar product
             first_term = []
@@ -333,7 +349,7 @@ def compute_T_matrix(S, phi_dict, phi_values):
             for n in gates_i:
                 if n >= S.shape[0]:
                     raise IndexError(f"Index {n} is out of bounds for S with size {S.shape[0]}")
-                print(f"n in gates_i: {n}")  # Debug: Print n
+                #print(f"n in gates_i: {n}")  # Debug: Print n
 
                 # If gate n has more parameters, construct the product term
                 factors_i = [phi_values[p] for p in range(n_params) if n in phi_dict[p] and p != i]
@@ -347,7 +363,7 @@ def compute_T_matrix(S, phi_dict, phi_values):
             for k in gates_j:
                 if k >= S.shape[1]:
                     raise IndexError(f"Index {k} is out of bounds for S with size {S.shape[1]}")
-                print(f"k in gates_j: {k}")  # Debug: Print k
+                #print(f"k in gates_j: {k}")  # Debug: Print k
 
                 factors_j = [phi_values[p] for p in range(n_params) if k in phi_dict[p] and p != j]
                 if factors_j:
@@ -360,7 +376,7 @@ def compute_T_matrix(S, phi_dict, phi_values):
             T_ij = 0
             for term_i, n in first_term:
                 for term_j, k in second_term:
-                    print(f"Calculating T_ij for gates {n}, {k}")  # Debug: Print n, k before calculation
+                    #print(f"Calculating T_ij for gates {n}, {k}")  # Debug: Print n, k before calculation
                     T_ij += term_i * term_j * S[n, k]
 
             # Store the result in T[i, j]
@@ -395,6 +411,7 @@ def find_independent_parameters(T, n_params, tol, independent_at_point, theta):
             for k in range(len(current_params)):
                 current_T[j, k] = T[current_params[j], current_params[k]]
 
+        #print("smallest EV:",min(np.linalg.eigvals(current_T)))
         # Check if the minimum eigenvalue is greater than the tolerance (indicating independence)
         if min(np.linalg.eigvals(current_T)) > tol:
             indep_params.append(p)
@@ -448,9 +465,9 @@ def IDEA(circuit, phi_dict, tol=10 ** (-10), n_points=1000, verbose=True):
 
     for idx in tqdm.tqdm(range(n_points)):
         # Choose random parameter values for phi_values
-        print(n_params)
+        #print(n_params)
         theta = 2 * np.pi * np.random.random(n_params)
-        print(f"Iteration {idx}, Random theta: {theta}")
+        #print(f"Iteration {idx}, Random theta: {theta}")
 
         # Compute the S matrix for the given circuit and phi_values
         S_matrix = np.asmatrix(np.zeros((n_params, n_params)))
@@ -459,7 +476,7 @@ def IDEA(circuit, phi_dict, tol=10 ** (-10), n_points=1000, verbose=True):
                 S_matrix[j, k] = (circuit.DiffCircuitFn(j, theta).H * circuit.DiffCircuitFn(k, theta)).real
 
         # Print the computed S_matrix for debugging purposes
-        print(f"S_matrix at iteration {idx}: \n{S_matrix}")
+        #print(f"S_matrix at iteration {idx}: \n{S_matrix}")
 
         # Compute the T matrix using the computed S matrix, phi_dict, and phi_values
 

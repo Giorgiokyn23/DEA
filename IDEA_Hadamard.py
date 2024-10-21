@@ -7,7 +7,7 @@ class CHE_Circuit(Circuit):
 
     def Hadamard(self, k):
         """Defines the non-parametric Hadamard gate for qubit k."""
-        H = np.array([[1, 1], [1, -1]]) / np.sqrt(2)  # Hadamard matrix
+        H = np.matrix([[1, 1], [1, -1]]) / np.sqrt(2)  # Hadamard matrix
         # Apply the non-parametric Hadamard gate to the k-th qubit
         return self._apply_single_qubit_gate(H, k)
 
@@ -28,7 +28,7 @@ class CHE_Circuit(Circuit):
         """Applies Hadamard and RZ to each qubit."""
         for idx, x in enumerate(data):
             #self.apply(self.Hadamard(idx))  # Apply Hadamard to each qubit
-            #self.apply(self.RX(idx))
+            self.apply(self.RX(idx))
             self.apply(self.RZ(idx))  # Apply RZ to each qubit with value from data
 
     def apply_entangling_layer(self, data):
