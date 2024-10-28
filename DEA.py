@@ -16,13 +16,13 @@ class Circuit:
             set_default_init = False
             # testing initialization
             try:
-                self._wavefunction = np.asmatrix(init).astype(np.complex128).reshape((self.dim,1))
+                self._wavefunction = np.asmatrix(init).astype(np.complex128).reshape((self._dim,1))
             except:
                 print(f"invalid initialization - cannot cast to ({self.dim},1) np.complex128 matrix")
                 set_default_init = True
 
             norm = 0.
-            for j in range(self.dim):
+            for j in range(self._dim):
                 norm += abs(self._wavefunction[j,0])**2
             if norm == 0:
                 print("invalid initialization - initialized with zero vector")
@@ -42,8 +42,24 @@ class Circuit:
         return
 
     def reset(self):
-        self._wave_function = np.asmatrix(np.zeros((self.dim,1),dtype=np.complex128))
+        self._wave_function = np.asmatrix(np.zeros((self._dim,1),dtype=np.complex128))
         self._wavefunction[0,0] = 1.
+        self._gates = []
+        self._param_to_gate = []
+        return
+
+    def reset_random(self):
+        self._wave_function = np.asmatrix(np.zeros((self._dim,1),dtype=np.complex128))
+        isset = False
+        while not isset:
+            for j in range(self._dim):
+                self._wavefunction[j,0] = np.random.normal()
+            norm = 0.
+            for j in range(self._dim):
+                norm += abs(self._wavefunction[j,0])**2
+            if norm >0:
+                isset = True
+        self._wavefunction = self._wavefunction/np.sqrt(norm)
         self._gates = []
         self._param_to_gate = []
         return
@@ -234,16 +250,15 @@ def DEA(circuit, tol = 10**(-10), n_points = 1000,verbose=True):
         # find independent parameters at point
         indep_params = []
         for p in range(n_params):
-            current_S = np.asmatrix(np.zeros((p+1,p+1)))
+            current_S = np.asmatrix(np.zeros((len(indep_params)+1,len(indep_params)+1)))
             current_params = copy.copy(indep_params)
             current_params.append(p)
             for j in range(len(current_params)):
                 for k in range(len(current_params)):
                     current_S[j,k] = S[current_params[j],current_params[k]]
-                    
+
             if min(np.linalg.eigvals(current_S)) > tol:
                 indep_params.append(p)
-
         # check whether this is a known set of independent parameters
         known = False
         for known_set_idx in range(len(independent_at_point)):
@@ -403,7 +418,7 @@ def find_independent_parameters(T, n_params, tol, independent_at_point, theta):
 
     # Find independent parameters
     for p in range(n_params):
-        current_T = np.asmatrix(np.zeros((p + 1, p + 1)))
+        current_T = np.asmatrix(np.zeros((len(indep_params) + 1, len(indep_params) + 1)))
         current_params = copy.copy(indep_params)
         current_params.append(p)
 
