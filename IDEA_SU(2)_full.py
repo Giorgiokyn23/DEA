@@ -134,7 +134,7 @@ phi_dict = {
 }
 
 
-A = DEA.IDEA(C,phi_dict, n_points=100)
+A = DEA.IDEA(C,phi_dict, n_points=1)
 print(A)
 '''
 if unique1:

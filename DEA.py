@@ -476,7 +476,7 @@ def IDEA(circuit, phi_dict, tol=10 ** (-10), n_points=1000, verbose=True):
     independent_at_point = []
 
     if verbose:
-        print("Running DEA with T matrix")
+        print("Running IDEA with T matrix")
 
     for idx in tqdm.tqdm(range(n_points)):
         # Choose random parameter values for phi_values
